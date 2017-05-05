@@ -1,0 +1,15 @@
+boto3  # needed for access to AWS resources
+dealer  # static file versioning from scm
+dj-database-url  # heroku
+django
+django-dotenv  # for .env ingest
+django-localflavor  # int'l localities, state abbrs, etc.
+django-storages  # s3 asset storage
+django-sekizai  # addtoblock
+foundation
+gunicorn  # heroku
+psycopg2  # pg
+# python-memcached
+python3-memcached
+pytz  # for django tz awareness
+requests

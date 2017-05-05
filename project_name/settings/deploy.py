@@ -4,18 +4,9 @@ from .base import *  # noqa
 os.environ.setdefault('CACHE_HOST', '127.0.0.1:11211')
 os.environ.setdefault('BROKER_HOST', '127.0.0.1:5672')
 
-#: deploy environment - e.g. "staging" or "production"
-ENVIRONMENT = os.environ['ENVIRONMENT']
-
 SECRET_KEY = os.environ['SECRET_KEY']
 
 DEBUG = False
-
-DATABASES['default']['NAME'] = '{{ project_name }}_%s' % ENVIRONMENT.lower()
-DATABASES['default']['USER'] = '{{ project_name }}_%s' % ENVIRONMENT.lower()
-DATABASES['default']['HOST'] = os.environ.get('DB_HOST', '')
-DATABASES['default']['PORT'] = os.environ.get('DB_PORT', '')
-DATABASES['default']['PASSWORD'] = os.environ.get('DB_PASSWORD', '')
 
 WEBSERVER_ROOT = '/var/www/{{ project_name }}/'
 
@@ -32,10 +23,10 @@ CACHES = {
     }
 }
 
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', False)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.sendgrid.net')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', os.environ.get('SENDGRID_USERNAME', ''))
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', os.environ.get('SENDGRID_PASSWORD', ''))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', True)
 EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', False)
 # use TLS or SSL, not both:
 assert not (EMAIL_USE_TLS and EMAIL_USE_SSL)
@@ -47,8 +38,6 @@ else:
     default_smtp_port = 25
 EMAIL_PORT = os.environ.get('EMAIL_PORT', default_smtp_port)
 EMAIL_SUBJECT_PREFIX = '[{{ project_name|title }} %s] ' % ENVIRONMENT.title()
-DEFAULT_FROM_EMAIL = 'noreply@%(DOMAIN)s' % os.environ
-SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 CSRF_COOKIE_SECURE = True
 
@@ -56,14 +45,27 @@ SESSION_COOKIE_SECURE = True
 
 SESSION_COOKIE_HTTPONLY = True
 
-ALLOWED_HOSTS = [os.environ['DOMAIN']]
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '[::1]',
+    '{}'.format(SITE_FQDN),
+]
+
+DOMAIN = os.environ.setdefault('DOMAIN', None)
+if DOMAIN:
+    ALLOWED_HOSTS.append('.{}'.format(DOMAIN))
+
+# Redirect to HTTPS in production via ELB/proxy
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = bool(os.environ.setdefault('SECURE_REDIRECT', str(True)) == 'True')
 
 # Use template caching on deployed servers
 for backend in TEMPLATES:
-    if backend['BACKEND'] == 'django.template.backends.django.DjangoTemplates':
-        default_loaders = ['django.template.loaders.filesystem.Loader']
+    if backend['BACKEND'].endswith('DjangoTemplates'):
+        default_loaders = ['foundation.template.loaders.filesystem.Loader']
         if backend.get('APP_DIRS', False):
-            default_loaders.append('django.template.loaders.app_directories.Loader')
+            default_loaders.append('foundation.template.loaders.app_directories.Loader')
             # Django gets annoyed if you both set APP_DIRS True and specify your own loaders
             backend['APP_DIRS'] = False
         loaders = backend['OPTIONS'].get('loaders', default_loaders)
@@ -78,8 +80,20 @@ for backend in TEMPLATES:
 # CELERY_SEND_TASK_ERROR_EMAILS = True
 # BROKER_URL = 'amqp://{{ project_name }}_%(ENVIRONMENT)s:%(BROKER_PASSWORD)s@%(BROKER_HOST)s/{{ project_name }}_%(ENVIRONMENT)s' % os.environ  # noqa
 
+DATABASES['default']['ENGINE'] = 'django.db.backends.postgresql_psycopg2'
+
 # Environment overrides
 # These should be kept to an absolute minimum
-if ENVIRONMENT.upper() == 'LOCAL':
+if ENVIRONMENT == 'local':
     # Don't send emails from the Vagrant boxes
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    if os.environ.get('RDS_HOSTNAME'):
+        DATABASES['default']['HOST'] = os.environ['RDS_HOSTNAME']
+        DATABASES['default']['PORT'] = os.environ['RDS_PORT']
+        DATABASES['default']['NAME'] = os.environ['RDS_DB_NAME']
+        DATABASES['default']['USER'] = os.environ['RDS_USERNAME']
+        DATABASES['default']['PASSWORD'] = os.environ['RDS_PASSWORD']
+    else:
+        import dj_database_url
+        DATABASES['default'] =  dj_database_url.config()

@@ -1,4 +1,4 @@
-{% if False %}
+.. {% if False %}
 Installation
 ------------
 
@@ -10,7 +10,7 @@ To start a new project with this template::
       --name=Makefile,gulpfile.js,package.json \
       <project_name>
 
-{% endif %}
+.. {% endif %}
 {{ project_name|title }}
 ========================
 

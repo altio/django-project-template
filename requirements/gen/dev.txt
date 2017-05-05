@@ -1,0 +1,6 @@
+-r base.txt
+coverage  # coverage analysis
+faker  # fake data gen for test fixtures
+flake8  # python lint and code analysis
+sphinx  # docs
+sphinx-rtd-theme  # docs theme

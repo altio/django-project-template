@@ -24,7 +24,7 @@ var coverageEnforcer = require('gulp-istanbul-enforcer');
 var spawn = require('child_process').spawn;
 var argv = require('yargs')
   .default('port', 8000)
-  .default('address', 'localhost')
+  .default('address', '0.0.0.0')
   .argv;
 
 // External dependencies you do not want to rebundle while developing,

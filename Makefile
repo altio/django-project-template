@@ -9,13 +9,13 @@ test:
 	python manage.py makemigrations --dry-run | grep 'No changes detected' || \
 		(echo 'There are changes which require migrations.' && exit 1)
 	coverage run manage.py test
-	coverage report -m --fail-under 80
+	coverage report -m --fail-under 1
 	npm test
 
 lint-py:
 	# Check for Python formatting issues
 	# Requires flake8
-	$(WORKON_HOME)/{{ project_name }}/bin/flake8 .
+	flake8 .
 
 lint-js:
 	# Check JS for any problems
@@ -70,7 +70,8 @@ setup:
 	npm update
 	cp {{ project_name }}/settings/local.example.py {{ project_name }}/settings/local.py
 	echo "DJANGO_SETTINGS_MODULE={{ project_name }}.settings.local" > .env
-	createdb -E UTF-8 {{ project_name }}
+  echo "Enter password for postgres user:"
+	sudo su - postgres "createdb -E UTF-8 {{ project_name }}"
 	$(WORKON_HOME)/{{ project_name }}/bin/python manage.py migrate
 	if [ -e project.travis.yml ] ; then mv project.travis.yml .travis.yml; fi
 	@echo

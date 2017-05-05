@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 Django settings for {{ project_name }} project.
 
@@ -11,20 +13,55 @@ https://docs.djangoproject.com/en/{{ docs_version }}/ref/settings/
 """
 
 import os
+import socket
+import sys
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, os.pardir))
+# branch mappings
+BRANCH_ENVIRONMENTS = {
+    'master': 'production',
+    'develop': 'staging',
+}
+DEPLOY_ENVIRONMENTS = tuple(BRANCH_ENVIRONMENTS.values())
+DEPLOY_ENVIRONMENT = os.environ.get('DEPLOY_ENVIRONMENT')
+DEPLOY_BRANCH = os.environ.get('CIRCLE_BRANCH')
+if DEPLOY_BRANCH in BRANCH_ENVIRONMENTS:
+    branch_env = BRANCH_ENVIRONMENTS[DEPLOY_BRANCH]
+    assert os.environ.setdefault('DEPLOY_ENVIRONMENT', branch_env) == branch_env
+    DEPLOY_ENVIRONMENT = os.environ['DEPLOY_ENVIRONMENT']
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# deploy environment
+ENVIRONMENT = os.environ['ENVIRONMENT']
+if ENVIRONMENT == 'deploy':
+    ENVIRONMENT = DEPLOY_ENVIRONMENT
+assert ENVIRONMENT in DEPLOY_ENVIRONMENTS + ('local', 'ci')
+
+DEPLOY_SYNC_DB = bool(os.environ.setdefault('DEPLOY_SYNC_DB', str(True)) == 'True')
+
+# Global Site Parameters
+SITE_ID = os.environ.get('SITE_ID', 1)
+SITE_FQDN = os.environ.get('SITE_FQDN', socket.getfqdn())
+SITE_NAME = '{{ project_name|title }}'
+
+DEFAULT_FROM_EMAIL = 'noreply@{}'.format(SITE_FQDN)
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# Build paths inside the project like this: os.path.join(BASE_DIR, ...)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
 ADMINS = (
     # ('Your Name', 'your_email@example.com'),
+    ('{} Admin'.format(SITE_NAME), 'admin@{}'.format(SITE_FQDN)),
 )
 
 # Application definition
 
-INSTALLED_APPS = [
+PROJECT_APPS = [
+]
+
+INSTALLED_APPS = PROJECT_APPS + [
+    '{{ project_name }}',
+    'foundation',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -32,7 +69,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.admin',
     'django.contrib.humanize',
+    'django.contrib.sites',
     'django.contrib.sitemaps',
+    'sekizai',
 ]
 
 MIDDLEWARE_CLASSES = [
@@ -41,7 +80,7 @@ MIDDLEWARE_CLASSES = [
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'foundation.auth.middleware.AuthenticationMiddleware',
     'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -51,11 +90,7 @@ ROOT_URLCONF = '{{ project_name }}.urls'
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [
-            os.path.join(BASE_DIR, 'templates'),
-        ],
-        'APP_DIRS': True,
+        'BACKEND': 'foundation.template.backends.django.DjangoTemplates',
         'OPTIONS': {
             'context_processors': [
                 'django.contrib.auth.context_processors.auth',
@@ -64,7 +99,11 @@ TEMPLATES = [
                 'django.template.context_processors.tz',
                 'django.template.context_processors.request',
                 'django.contrib.messages.context_processors.messages',
-                'dealer.contrib.django.context_processor',
+                'dealer.contrib.django.context_processor',  # static cache versioning
+                'sekizai.context_processors.sekizai',
+            ],
+            'loaders': [
+                'foundation.template.loaders.app_directories.Loader'
             ],
         },
     },
@@ -80,12 +119,17 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'NAME': '{{ project_name }}',
-        'USER': '',
-        'PASSWORD': '',
-        'HOST': '',
-        'PORT': '',
+        'USER': 'postgres',
+        'PASSWORD': 'password',
+        'HOST': '127.0.0.1',
+        'PORT': '5432',
+    } if ENVIRONMENT != 'ci' else {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(PROJECT_ROOT, 'db.sqlite3'),
     }
 }
+
+DB_DUMP_FORMAT_STRING = '{}.dump.sql'
 
 # Absolute filesystem path to the directory that will hold user-uploaded files.
 # Example: "/home/media/media.lawrence.com/media/"
@@ -164,20 +208,35 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/{{ docs_version }}/howto/static-files/
-# Absolute path to the directory static files should be collected to.
-# Don't put anything in this directory yourself; store your static files
-# in apps' "static/" subdirectories and in STATICFILES_DIRS.
-# Example: "/home/media/media.lawrence.com/static/"
-STATIC_ROOT = os.path.join(PROJECT_ROOT, 'public', 'static')
-
-# URL prefix for static files.
-# Example: "http://media.lawrence.com/static/"
-STATIC_URL = '/static/'
-
-# Additional locations of static files
-STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, 'static'),
-)
+STATICFILES_LOCATION = 'static'
+USE_AWS = any([
+    bool(os.environ.setdefault('USE_AWS', str(False)) == 'True'),
+    ENVIRONMENT not in ('local', 'ci'),
+    'sync' in sys.argv
+])
+if USE_AWS:
+    AWS_STORAGE_BUCKET_FORMAT = '{{ project_name }}-{environment}'
+    APP_NAME = AWS_STORAGE_BUCKET_NAME = (
+        AWS_STORAGE_BUCKET_FORMAT.format(environment=ENVIRONMENT)
+        if ENVIRONMENT != 'ci'
+        else None
+    )
+    AWS_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
+    AWS_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_KEY']
+    os.environ['AWS_SECRET_ACCESS_KEY'] = AWS_SECRET_ACCESS_KEY
+    AWS_S3_CUSTOM_DOMAIN = '{}.s3.amazonaws.com'.format(AWS_STORAGE_BUCKET_NAME)
+    STATICFILES_STORAGE = '{{ project_name }}.storage.S3BotoManifestStaticFilesStorage'
+    STATIC_URL = "https://{}/{}/".format(AWS_S3_CUSTOM_DOMAIN, STATICFILES_LOCATION)
+else:
+    # Absolute path to the directory static files should be collected to.
+    # Don't put anything in this directory yourself; store your static files
+    # in apps' "static/" subdirectories and in STATICFILES_DIRS.
+    # Example: "/home/media/media.lawrence.com/static/"
+    STATIC_ROOT = os.path.join(PROJECT_ROOT, STATICFILES_LOCATION)
+    # URL prefix for static files.
+    # Example: "http://media.lawrence.com/static/"
+    # non-s3 hosted path on same server (or by proxy)
+    STATIC_URL = '/static/'
 
 # If using Celery, tell it to obey our logging configuration.
 CELERYD_HIJACK_ROOT_LOGGER = False
@@ -198,6 +257,15 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Custom Auth Backend
+# https://docs.djangoproject.com/en/1.10/ref/settings/#authentication-backends
+AUTHENTICATION_BACKENDS = ['foundation.auth.backends.ModelBackend']
+
+# AUTH_USER_MODEL = '{{ project_name }}.User'
+# LOGIN_URL = '/login/'
+# LOGIN_REDIRECT_URL = '/'
+# LOGOUT_REDIRECT_URL = '/'
+
 # Make things more secure by default. Run "python manage.py check --deploy"
 # for even more suggestions that you might want to add to the settings, depending
 # on how the site uses SSL.
@@ -205,3 +273,5 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 CSRF_COOKIE_HTTPONLY = True
 X_FRAME_OPTIONS = 'DENY'
+
+COPYRIGHT_STATEMENT = "Copyright © {year} {{ project_name | title }}"

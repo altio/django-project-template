@@ -1,14 +1,14 @@
+# -*- coding: utf-8 -*-
+
 import sys
 
-from {{ project_name }}.settings.base import *  # noqa
+from .base import *  # NOQA
 
-DEBUG = True
-
-INSTALLED_APPS += (
-    'debug_toolbar',
-)
+DEBUG = bool(os.environ.setdefault('DEBUG', str(False)) == 'True')
 
 INTERNAL_IPS = ('127.0.0.1', )
+
+ALLOWED_HOSTS = ['*']
 
 #: Don't send emails, just print them on stdout
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

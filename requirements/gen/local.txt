@@ -1,0 +1,8 @@
+-r dev.txt
+awscli  # aws apis
+awsebcli  # manual deploy
+django-debug-toolbar
+django-extensions  # useful utils
+ipython # better interactive interpreter
+pygraphviz  # for graphing models
+Werkzeug  # combined with extensions gives detailed debugging
