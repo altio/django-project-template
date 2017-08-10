@@ -5,7 +5,10 @@ if DEBUG:
         'django_extensions',
     )
 
-    DEBUG_TOOLBAR = bool(os.environ.setdefault('DEBUG_TOOLBAR', str(False)) == 'True')
+    DEBUG_TOOLBAR = bool(
+        os.environ.setdefault('DEBUG_TOOLBAR', str(False)) == 'True'
+        and ENVIRONMENT == 'local'
+    )
     if DEBUG_TOOLBAR:
         INSTALLED_APPS += (
             'debug_toolbar',

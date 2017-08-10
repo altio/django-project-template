@@ -7,7 +7,7 @@ from django.contrib.staticfiles.management.commands import collectstatic
 from django.core.management.base import CommandError
 from traceback import print_exc
 
-from ..storage import S3BotoManifestStaticFilesStorage
+from ...storage import S3BotoManifestStaticFilesStorage
 
 
 class Command(collectstatic.Command):
